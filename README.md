@@ -1,2 +1,2 @@
 # Fumiko
-Libitina's deep emotional analysis engine, using MNIST classification.
+Libitina's deep emotional analysis engine
