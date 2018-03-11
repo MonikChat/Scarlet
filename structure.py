@@ -54,10 +54,10 @@ class Neuron:
     def __mul__(self, other):
         return self.value * other
 
-    def isSon(self, neuron):
+    def is_son(self, neuron):
         return neuron in self.parents
 
-    def connectedWeight(self, neuron) -> float:
+    def connected_weight(self, neuron) -> float:
         return self.weights[self.parents.index(neuron)]
 
     @property
@@ -65,11 +65,8 @@ class Neuron:
         return np.sum(self.parents * self.weights) + self.bias
 
     @property
-    def parentsInput(self) -> float: # Returns 1 if no parents, because of multiplciation
-        if not self.parents:
-            return 1
-        else:
-            return np.sum(np.array([neuron.value for neuron in self.parents]))
+    def parents_input(self) -> float:
+        return np.sum(np.array([neuron.value for neuron in self.parents]))
 
     @property
     def uid(self) -> int:
@@ -172,9 +169,9 @@ class LayerNetwork:
                     errors[neuron.name] = (target[neuron.index] - neuron.value)
                 else:
                     error = 0
-                    for sonNeuron in self.layers[layer.index+1].neurons:
-                        if sonNeuron.isSon(neuron):
-                            error += errors[sonNeuron.name] * sonNeuron.connectedWeight(neuron)
+                    for son_neuron in self.layers[layer.index+1].neurons:
+                        if son_neuron.is_son(neuron):
+                            error += errors[son_neuron.name] * son_neuron.connected_weight(neuron)
                     errors[neuron.name] = error
 
                 delta[neuron.name] = errors[neuron.name] * sigmoid_prime_rawvalue(neuron.value)
@@ -225,7 +222,7 @@ class LayerNetwork:
             for layer in self.layers[:0:-1]:
                 for neuron in layer.neurons:
                     for weight in neuron.weights:
-                        weight += alpha * grad[neuron.name] * neuron.parentsInput
+                        weight += alpha * grad[neuron.name] * neuron.parents_input
 
     def get_response(self, data: np.array) -> tuple:
         out = self.feed(data)
