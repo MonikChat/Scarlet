@@ -54,9 +54,26 @@ class Neuron:
     def __mul__(self, other):
         return self.value * other
 
+    def isSon(self, neuron):
+        return neuron in self.parents
+
+    def connectedWeight(self, neuron) -> float:
+        return self.weights[self.parents.index(neuron)]
+
     @property
     def wxb(self) -> float:
         return np.sum(self.parents * self.weights) + self.bias
+
+    @property
+    def parentsInput(self) -> float: # Returns 1 if no parents, because of multiplciation
+        if not self.parents:
+            return 1
+        else:
+            return np.sum(np.array([neuron.value for neuron in self.parents]))
+
+    @property
+    def uid(self) -> int:
+        return ord(self.char) + self.index
 
     def update_value(self) -> None:
         self.value = float(sigmoid(self.wxb))
@@ -147,74 +164,27 @@ class LayerNetwork:
         return self.layers[-1].cost(expected)
 
     def get_gradient(self, target: np.array, a: float = 0.000001) -> list:
-        weight_updates = []
-        errors = []
-        output_network = get_output()
+        delta = {}
+        errors = {}
         for layer in self.layers[:0:-1]:
-            neurons = []
-            weight_neurons = []
             for neuron in layer.neurons:
-                #deltaChange = eTotal regard output * out regard Net * net regard weight
-                err = []
-                weights = []
-                #out - target
-                errorRegardingOutput = output_network[neuron.index] - target[neuron.index]
-                #how output change respect total net input
-                outputRegardingNet = sigmoid_prime_rawvalue(output_network[neuron.index])
-                #how the weight is influencing
-                inputRegardingWeight = neuron.value
+                if self.layers[-1] == layer:
+                    errors[neuron.name] = (target[neuron.index] - neuron.value)
+                else:
+                    error = 0
+                    for sonNeuron in self.layers[layer.index+1].neurons:
+                        if sonNeuron.isSon(neuron):
+                            error += errors[sonNeuron.name] * sonNeuron.connectedWeight(neuron)
+                    errors[neuron.name] = error
 
-                # for prev_neuron in layer.parent.neurons:
-                #     if layer == self.layers[-1]:
-                #         # d_N = f'(x) * (yN - t)
-                #         d_n = sigmoid_prime(prev_neuron.value) * self.cost.derative(neuron.value, output[neuron.index])
+                delta[neuron.name] = errors[neuron.name] * sigmoid_prime_rawvalue(neuron.value)
 
-                #         errors.append(float(d_n))
-                #         weights.append(-a * float(d_n))
-                #     else:
-                #         # d_n = f'(x) * d_n+1 * w_n
-                #         next_layer = errors[len(self.layers) - layer.index - 2]
-                #         print(f"{next_layer}")
-                #         next_layer_neuron_weight = np.sum([next_neuron[neuron.index]
-                #                                            for next_neuron in next_layer])
-                #         d_n = (sigmoid_prime(prev_neuron.value) *
-                #                next_layer_neuron_weight *
-                #                neuron.weights[prev_neuron.index])
+                print(f"Err {neuron.name} : {errors[neuron.name]}")
+                print(f"Delta {neuron.name} : {delta[neuron.name]}")
 
-                #         errors.append(float(d_n))
-                #         weights.append(float(-a * next_layer_neuron_weight * neuron.value))
+        return delta
 
-        #         weight_neurons.append(weights)
 
-        #     errors.append(neurons)
-        #     weight_updates.append(weight_neurons)
-
-        # bias_updates = []
-        # for layer in self.layers[:0:-1]:
-        #     neurons = []
-        #     for neuron in layer.neurons:
-        #         """
-        #         if layer == self.layers[-1]:
-        #             # d_N = f'(x) * (yN - t)
-        #             d_n = sigmoid_prime(prev_neuron.value) * (neuron.value - output[neuron.index])
-
-        #             neurons.append(-a * float(d_n))
-        #         else:
-        #             # d_n = f'(x) * d_n+1 * b_n
-        #             next_layer = bias_updates[len(self.layers) - layer.index - 2]
-        #             inv_a = -1 / a
-        #             next_layer_neuron_weight = np.sum(
-        #                 inv_a * next_neuron for next_neuron in next_layer)
-        #             d_n = (sigmoid_prime(prev_neuron.value) *
-        #                    next_layer_neuron_weight *
-        #                    neuron.bias)
-        #             neurons.append(-a * float(d_n))
-        #         """
-        #         neurons.append(0.0)
-
-        #     bias_updates.append(neurons)
-
-        return weight_updates, bias_updates
 
     def visualize(self, fn: str = None, label: str = None) -> None:
         import itertools
@@ -248,9 +218,14 @@ class LayerNetwork:
 
     def backprop(self, expected: np.array):
             print(f"INFO: Cost: {self.get_cost(expected)}")
-            grad, bias = self.get_gradient(expected)
-            for weight, bias_, layer in zip(grad[::-1], bias[::-1], self.layers[1:]):
-                layer.update_weight_bias(weight, bias_)
+            grad = self.get_gradient(expected)
+            #for weight, bias_, layer in zip(grad[::-1], bias[::-1], self.layers[1:]):
+            #    layer.update_weight_bias(weight, bias_)
+            alpha = 0.00001
+            for layer in self.layers[:0:-1]:
+                for neuron in layer.neurons:
+                    for weight in neuron.weights:
+                        weight += alpha * grad[neuron.name] * neuron.parentsInput
 
     def get_response(self, data: np.array) -> tuple:
         out = self.feed(data)
@@ -260,13 +235,14 @@ class LayerNetwork:
 
 
 def main():
+    priorStatus()
+
+
+def layerEx():
     inputLayer = NeuronLayer(0, 3, 50)
     layer1 = NeuronLayer(1, 5, inputLayer,10)
     inputLayer.input([1,2,3])
     layer1.update()
-
-
-
 
 def neuronExper():
     inputNeuron = Neuron(1, True, char='a')
@@ -317,3 +293,69 @@ def priorStatus():
 
 if __name__ == "__main__":
     main()
+#deltaChange = eTotal regard output * out regard Net * net regard weight
+                # err = []
+                # weights = []
+                # #out - target
+                # errorRegardingOutput = neuron.value - target[neuron.index] ##external layer!!!! target
+                # #how output change respect total net input
+                # outputRegardingNet = sigmoid_prime_rawvalue(output_network[neuron.index])
+                # #how the weight is influencing
+                # inputRegardingWeight = neuron.parentsInput
+
+                # weight_updates[neuron.index] = (errorRegardingOutput * outputRegardingNet * inputRegardingWeight) * a
+
+                # errors[neuron.index] = (target[neuron.index] - neuron.value) * sigmoid_prime_rawvalue(neuron.value)
+
+                # errors[neuron.index] = ()
+
+
+                # for prev_neuron in layer.parent.neurons:
+                #     if layer == self.layers[-1]:
+                #         # d_N = f'(x) * (yN - t)
+                #         d_n = sigmoid_prime(prev_neuron.value) * self.cost.derative(neuron.value, output[neuron.index])
+
+                #         errors.append(float(d_n))
+                #         weights.append(-a * float(d_n))
+                #     else:
+                #         # d_n = f'(x) * d_n+1 * w_n
+                #         next_layer = errors[len(self.layers) - layer.index - 2]
+                #         print(f"{next_layer}")
+                #         next_layer_neuron_weight = np.sum([next_neuron[neuron.index]
+                #                                            for next_neuron in next_layer])
+                #         d_n = (sigmoid_prime(prev_neuron.value) *
+                #                next_layer_neuron_weight *
+                #                neuron.weights[prev_neuron.index])
+
+                #         errors.append(float(d_n))
+                #         weights.append(float(-a * next_layer_neuron_weight * neuron.value))
+
+        #         weight_neurons.append(weights)
+
+        #     errors.append(neurons)
+        #     weight_updates.append(weight_neurons)
+
+        # bias_updates = []
+        # for layer in self.layers[:0:-1]:
+        #     neurons = []
+        #     for neuron in layer.neurons:
+        #         """
+        #         if layer == self.layers[-1]:
+        #             # d_N = f'(x) * (yN - t)
+        #             d_n = sigmoid_prime(prev_neuron.value) * (neuron.value - output[neuron.index])
+
+        #             neurons.append(-a * float(d_n))
+        #         else:
+        #             # d_n = f'(x) * d_n+1 * b_n
+        #             next_layer = bias_updates[len(self.layers) - layer.index - 2]
+        #             inv_a = -1 / a
+        #             next_layer_neuron_weight = np.sum(
+        #                 inv_a * next_neuron for next_neuron in next_layer)
+        #             d_n = (sigmoid_prime(prev_neuron.value) *
+        #                    next_layer_neuron_weight *
+        #                    neuron.bias)
+        #             neurons.append(-a * float(d_n))
+        #         """
+        #         neurons.append(0.0)
+
+        #     bias_updates.append(neurons)
