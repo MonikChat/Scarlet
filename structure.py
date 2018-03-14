@@ -74,7 +74,7 @@ class Neuron:
 
     def update_value(self) -> None:
         self.value = float(sigmoid(self.wxb))
-        print(self.value)
+        #print(self.value)
 
     @property
     def name(self):
@@ -139,7 +139,7 @@ class LayerNetwork:
     def input(self, data: np.array) -> None:
         self.layers[0].input(data)
         for layer in self.layers[1:]:
-            print(f"DEBUG: Layer {layer.index} is updating values...")
+            #print(f"DEBUG: Layer {layer.index} is updating values...")
             layer.update()
 
     def save(self, fn) -> None:
@@ -173,11 +173,12 @@ class LayerNetwork:
                         if son_neuron.is_son(neuron):
                             error += errors[son_neuron.name] * son_neuron.connected_weight(neuron)
                     errors[neuron.name] = error
-
+                #print(f"error for {neuron.name} : {errors[neuron.name]}")
                 delta[neuron.name] = errors[neuron.name] * sigmoid_prime_rawvalue(neuron.value)
+                #print(f"delta for {neuron.name} : {delta[neuron.name]}")
 
-                print(f"Err {neuron.name} : {errors[neuron.name]}")
-                print(f"Delta {neuron.name} : {delta[neuron.name]}")
+                #print(f"Err {neuron.name} : {errors[neuron.name]}")
+                #print(f"Delta {neuron.name} : {delta[neuron.name]}")
 
         return delta
 
@@ -207,6 +208,7 @@ class LayerNetwork:
     def feed(self, data: np.array, expected: np.array = None) -> np.array:
         self.input(data)
         out = self.get_output()
+        print(f'Expected: {expected} - Output:{out}')
 
         if expected is not None:
             self.backprop(expected)
@@ -214,15 +216,16 @@ class LayerNetwork:
         return out
 
     def backprop(self, expected: np.array):
-            print(f"INFO: Cost: {self.get_cost(expected)}")
+            #print(f"INFO: Cost: {self.get_cost(expected)}")
             grad = self.get_gradient(expected)
             #for weight, bias_, layer in zip(grad[::-1], bias[::-1], self.layers[1:]):
             #    layer.update_weight_bias(weight, bias_)
-            alpha = 0.00001
+            alpha = 0.01
             for layer in self.layers[:0:-1]:
                 for neuron in layer.neurons:
-                    for weight in neuron.weights:
-                        weight += alpha * grad[neuron.name] * neuron.parents_input
+                    for i in range(len(neuron.weights)):
+                        neuron.weights[i] += alpha * grad[neuron.name] * neuron.parents_input
+
 
     def get_response(self, data: np.array) -> tuple:
         out = self.feed(data)
@@ -232,8 +235,8 @@ class LayerNetwork:
 
 
 def main():
-    priorStatus()
-
+    #priorStatus()
+    validation()
 
 def layerEx():
     inputLayer = NeuronLayer(0, 3, 50)
@@ -247,7 +250,22 @@ def neuronExper():
 
     inputNeuron.value = 5
     firstNeuron.update_value()
-    print(f"{firstNeuron.value}")   
+    #print(f"{firstNeuron.value}")   
+
+def validation():
+    net = LayerNetwork([1, 2, 2, 1])
+
+    for i in range(10000):
+        x = np.random.random()
+        data = np.array([x])
+        expected = np.array([functionToReplicate(x)])
+        net.feed(data, expected)
+
+
+
+def functionToReplicate(x: float) -> float:
+    return x*x
+
 
 def priorStatus():
     net = LayerNetwork([784, 16, 16, 10])
@@ -263,6 +281,7 @@ def priorStatus():
         res = np.array([0.0]*10)
         res[int(data['label'])] = 1.0
         net.feed(data['data'], res)
+        print(f"Iteration: {i}")
 
         # net.save("mnist.nn")
         # net.visualize(fn=f"iters/iteration_{i}.gv", label=data['label'])
