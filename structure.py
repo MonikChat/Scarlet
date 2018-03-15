@@ -205,10 +205,11 @@ class LayerNetwork:
         else:
             graph.render(fn)
 
-    def feed(self, data: np.array, expected: np.array = None) -> np.array:
+    def feed(self, data: np.array, expected: np.array = None, iter: int=0) -> np.array:
         self.input(data)
         out = self.get_output()
-        print(f'Expected: {expected} - Output:{out}')
+        if(iter%500 == 0):
+            print(f'Iter{iter} Data: {data} \nExpected: {expected}  \nOutput:{out}')
 
         if expected is not None:
             self.backprop(expected)
@@ -253,17 +254,20 @@ def neuronExper():
     #print(f"{firstNeuron.value}")   
 
 def validation():
-    net = LayerNetwork([1, 2, 2, 1])
+    net = LayerNetwork([10, 8, 8, 100])
 
     for i in range(10000):
-        x = np.random.random()
-        data = np.array([x])
-        expected = np.array([functionToReplicate(x)])
-        net.feed(data, expected)
+        x = int(np.random.random()*10)
+        data = np.array([0.0]*10)
+        data[x] = 1 
+        y = functionToReplicate(x)
+        expected = np.array([0.0]*100)
+        expected[y] = 1
+        net.feed(data, expected, i)
 
 
 
-def functionToReplicate(x: float) -> float:
+def functionToReplicate(x: int) -> int:
     return x*x
 
 
