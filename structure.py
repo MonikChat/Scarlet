@@ -45,9 +45,12 @@ class Neuron:
             self.parents = parents
             self.weights = np.random.random(len(parents))
             self.bias = np.random.random()
+            self.delta_weights = np.array([0.0] * len(parents))
+
 
         self.is_input = is_input
         self.value = 0.0
+        self.hidden_value = 0.0
         self.index = index
         self.char = char
 
@@ -62,17 +65,19 @@ class Neuron:
 
     @property
     def wxb(self) -> float:
-        return np.sum(self.parents * self.weights) + self.bias
+        return np.sum(self.parents * self.weights) #+ self.bias FIXME
 
     @property
     def parents_input(self) -> float:
         return np.sum(np.array([neuron.value for neuron in self.parents]))
 
     @property
-    def uid(self) -> int:
-        return ord(self.char) + self.index
+    def uid(self) -> str:
+        to_print = "%.2f" % self.value
+        return f"{self.name}-{to_print}"
 
     def update_value(self) -> None:
+        self.hidden_value = float(self.wxb)
         self.value = float(sigmoid(self.wxb))
         #print(self.value)
 
@@ -142,6 +147,30 @@ class LayerNetwork:
             #print(f"DEBUG: Layer {layer.index} is updating values...")
             layer.update()
 
+    def out_matrix(self, layer):
+        weights = []
+        if(not layer == self.layers[-1]):
+            forward_layer = self.layers[self.layers.index(layer)+1]
+            for neuron in forward_layer.neurons:
+                for i in range(len(neuron.weights)): #FIXME needed?
+                    weights.append(neuron.weights[i])
+        return weights
+
+    #input of given layer
+    def input_matrix(self, layer):
+        value = []
+        previous_index = self.layers.index(layer)-1
+        if(previous_index >= 0):
+            for neuron in self.layers[previous_index].neurons:
+                value.append(neuron.value)
+        return value
+
+    def hidden_layer_matrix_prime(self, layer):
+        hidden_value = []
+        for neuron in layer.neurons:
+            hidden_value.append(sigmoid_prime(neuron.hidden_value))
+        return hidden_value
+
     def save(self, fn) -> None:
         import pickle
 
@@ -163,18 +192,53 @@ class LayerNetwork:
     def get_gradient(self, target: np.array, a: float = 0.000001) -> list:
         delta = {}
         errors = {}
-        for layer in self.layers[:0:-1]:
+        totalError = 0
+        delta_output_sum = 0
+        for target, calculated in zip(target,self.get_output()):
+            totalError += target-calculated
+        delta_output_sum = sigmoid_prime(self.layers[-1].neurons[0].hidden_value) * totalError
+        delta_hidden_sum = []
+
+
+        for layer in self.layers[::-1]:
             for neuron in layer.neurons:
+                #OUT LAYER
                 if self.layers[-1] == layer:
-                    errors[neuron.name] = (target[neuron.index] - neuron.value)
-                else:
-                    error = 0
-                    for son_neuron in self.layers[layer.index+1].neurons:
-                        if son_neuron.is_son(neuron):
-                            error += errors[son_neuron.name] * son_neuron.connected_weight(neuron)
-                    errors[neuron.name] = error
-                #print(f"error for {neuron.name} : {errors[neuron.name]}")
-                delta[neuron.name] = errors[neuron.name] * sigmoid_prime_rawvalue(neuron.value)
+                    for i in range(len(neuron.weights)):
+                        neuron.delta_weights[i] = delta_output_sum / neuron.parents[i].value
+            
+            #MIDDLE LAYER
+            hidden_layer_logic = layer != self.layers[-1] and layer != self.layers[0]
+            if(hidden_layer_logic):
+                weights = delta_output_sum / self.out_matrix(layer)
+                hidden_layer =  self.hidden_layer_matrix_prime(layer)
+                delta_hidden_sum = weights * hidden_layer
+
+                delta_weights = []
+                for _input in self.input_matrix(layer):
+                    for hid_sum in delta_hidden_sum:
+                        delta_weights.append(hid_sum/_input)
+
+                for neuron in layer.neurons:
+                    for i in range(len(neuron.weights)):
+                        neuron.delta_weights[i] = delta_weights.pop(0)
+
+
+
+            #INPUT LAYER
+
+
+
+                # if self.layers[-1] == layer:
+                #     errors[neuron.name] = (target[neuron.index] - neuron.value)
+                # else:
+                #     error = 0
+                #     for son_neuron in self.layers[layer.index+1].neurons:
+                #         if son_neuron.is_son(neuron):
+                #             error += errors[son_neuron.name] * son_neuron.connected_weight(neuron)
+                #     errors[neuron.name] = error
+                # #print(f"error for {neuron.name} : {errors[neuron.name]}")
+                # delta[neuron.name] = errors[neuron.name] * sigmoid_prime(neuron.value)
                 #print(f"delta for {neuron.name} : {delta[neuron.name]}")
 
                 #print(f"Err {neuron.name} : {errors[neuron.name]}")
@@ -205,10 +269,26 @@ class LayerNetwork:
         else:
             graph.render(fn)
 
+    #Renders the neuron's name with value and weights
+    def print(self) -> None:
+        from graphviz import Digraph
+        f = Digraph('ANN', filename='ann', format="png")
+        f.attr(rankdir='LR', size='8.5')
+        f.attr('node', shape='circle')
+        for layer in self.layers:
+            for neuron in layer.neurons:
+                f.node(neuron.uid)
+                if(not neuron.is_input):
+                    for i in range(len(neuron.weights)):
+                        we = "%.2f" % neuron.weights[i]
+                        f.edge(neuron.parents[i].uid, neuron.uid, label=we)
+        f.view()
+
+
     def feed(self, data: np.array, expected: np.array = None, iter: int=0) -> np.array:
         self.input(data)
         out = self.get_output()
-        if(iter%500 == 0):
+        if(iter%10 == 0):
             print(f'Iter{iter} Data: {data} \nExpected: {expected}  \nOutput:{out}')
 
         if expected is not None:
@@ -225,8 +305,16 @@ class LayerNetwork:
             for layer in self.layers[:0:-1]:
                 for neuron in layer.neurons:
                     for i in range(len(neuron.weights)):
-                        neuron.weights[i] += alpha * grad[neuron.name] * neuron.parents_input
+                        neuron.weights[i] += neuron.delta_weights[i] * alpha
 
+            # for layer in self.layers[:0:-1]:
+            #     for neuron in layer.neurons:
+            #         for i in range(len(neuron.weights)):
+            #             neuron.weights[i] += alpha * grad[neuron.name] * neuron.parents_input
+            #             if(neuron.name == "D70"):
+            #                 a=2
+                            #print(f"INFO: {grad[neuron.name] * neuron.parents_input} -- {grad[neuron.name]} * {neuron.parents_input}")
+                        #print(f"{neuron.name}")
 
     def get_response(self, data: np.array) -> tuple:
         out = self.feed(data)
@@ -237,7 +325,45 @@ class LayerNetwork:
 
 def main():
     #priorStatus()
-    validation()
+    #validation()
+    #print(sigmoid(1.3))
+    simpleEx()
+
+def simpleEx():
+    net = LayerNetwork([2, 3, 1])
+    net.layers[1].neurons[0].weights[0] = 0.8
+    net.layers[1].neurons[0].weights[1] = 0.2
+    net.layers[1].neurons[1].weights[0] = 0.4 
+    net.layers[1].neurons[1].weights[1] = 0.9
+    net.layers[1].neurons[2].weights[0] = 0.3
+    net.layers[1].neurons[2].weights[1] = 0.5
+    net.layers[2].neurons[0].weights[0] = 0.3
+    net.layers[2].neurons[0].weights[1] = 0.5
+    net.layers[2].neurons[0].weights[2] = 0.9
+    for i in range(1000):
+        i_1 = np.random.random()
+        if(i_1 > 0.5):
+            i_1 = 1
+        else:
+            i_1 = 0.001
+        i_2 = np.random.random()
+        if(i_2 > 0.5):
+            i_2 = 1
+        else:
+            i_2 = 0.001
+        out = 0
+        if(i_1 == 1 and i_2 == 1):
+            out = 1
+        if(i_1 == 0 and i_2 == 0):
+            out = 1
+        net.feed(np.array([i_1,i_2]), np.array([out]))
+
+
+    net.print()
+
+
+
+
 
 def layerEx():
     inputLayer = NeuronLayer(0, 3, 50)
@@ -254,7 +380,7 @@ def neuronExper():
     #print(f"{firstNeuron.value}")   
 
 def validation():
-    net = LayerNetwork([10, 8, 8, 100])
+    net = LayerNetwork([10, 50 , 100])
 
     for i in range(10000):
         x = int(np.random.random()*10)
